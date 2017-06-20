@@ -51,9 +51,9 @@ def main():
 def test():
     project_dir = os.path.dirname(os.path.dirname(__file__))
     epub_file = os.path.join(
-        project_dir, 'test-epubs', 'BT000029028900100101900209_001.epub')
-    procedure(epub_file)
-
+        project_dir, 'test-epubs', 'BT000011939000100101900203_001.epub')
+    toc_table = procedure(epub_file)
+    print(toc_table)
 
 if __name__ == '__main__':
     main()

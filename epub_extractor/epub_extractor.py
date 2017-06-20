@@ -377,6 +377,27 @@ class EpubExtractor(object):
             }
 
     @cached_property
+    def xml_path_page_number_dict_basename(self):
+        """
+        XMLファイルとページ番号の対応表 ファイル名のみ版
+        :return: dict
+        """
+        return {
+            os.path.basename(k): v for k, v
+            in self.xml_path_page_number_dict.items()
+            }
+
+    def get_page_number_from_page_xml_path(self, page_xml_path, default=1):
+        """
+        ページXMLパスから画像番号を取得
+        """
+        if page_xml_path in self.xml_path_page_number_dict:
+            return self.xml_path_page_number_dict[page_xml_path]
+        else:
+            return self.xml_path_page_number_dict_basename.get(
+                os.path.basename(page_xml_path), default)
+
+    @cached_property
     def navigation_xml(self):
         """
         :rtype: NavigationXml
@@ -521,12 +542,9 @@ class NavigationXml(object):
     def navigation_xml_data(self):
         def _gen():
             bs = self.navigation_xml_bs4
-            pp_dict = self.ee.xml_path_page_number_dict
-
             for a in bs.find_all('a'):
                 href = a['href']
-
-                page_number = pp_dict.get(href)
+                page_number = self.ee.get_page_number_from_page_xml_path(href)
                 yield OrderedDict([
                     ('page_xml', href),
                     ('start_page', page_number),
@@ -587,15 +605,13 @@ class TocNcx(object):
         """
         toc.ncx を解析した辞書
         """
-        pp_dict = self.ee.xml_path_page_number_dict
-
         def _gen():
             ntq = namespace_tag_query(self.toc_ncx_etree._root)
             for np in self.toc_ncx_etree.findall(ntq('navPoint')):
                 text = np.find(ntq('text'))
                 content = np.find(ntq('content'))
                 src = content.attrib.get('src')
-                page_number = pp_dict.get(src)
+                page_number = self.ee.get_page_number_from_page_xml_path(src)
                 # play_order = np.attrib.get('playOrder')
                 yield OrderedDict([
                     ('page_xml', src),
