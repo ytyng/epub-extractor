@@ -276,9 +276,9 @@ class EpubExtractor(object):
         """
         id をキーにした item の辞書
         """
-        manifest = self.content_xml_etree.find(
-            './/{http://www.idpf.org/2007/opf}manifest')
-        items = manifest.findall('.//{http://www.idpf.org/2007/opf}item')
+        ntq = namespace_tag_query(self.content_xml_etree._root)
+        manifest = self.content_xml_etree.find(ntq('manifest'))
+        items = manifest.findall(ntq('item'))
         items_dict = {}
         for item in items:
             id = item.attrib.get('id')
@@ -290,9 +290,9 @@ class EpubExtractor(object):
         """
         spine > itemref をページ順に返すジェネレータ
         """
-        spine = self.content_xml_etree.find(
-            './/{http://www.idpf.org/2007/opf}spine')
-        itemrefs = spine.findall('.//{http://www.idpf.org/2007/opf}itemref')
+        ntq = namespace_tag_query(self.content_xml_etree._root)
+        spine = self.content_xml_etree.find(ntq('spine'))
+        itemrefs = spine.findall(ntq('itemref'))
         for itemref in itemrefs:
             yield itemref
 
@@ -357,8 +357,8 @@ class EpubExtractor(object):
         """
         コンテンツXML ( standard.opf) 内の、metadata エレメント
         """
-        metadata = self.content_xml_etree.find(
-            './/{http://www.idpf.org/2007/opf}metadata')
+        ntq = namespace_tag_query(self.content_xml_etree._root)
+        metadata = self.content_xml_etree.find(ntq('metadata'))
         return metadata
 
     @cached_property
@@ -378,23 +378,114 @@ class EpubExtractor(object):
 
     @cached_property
     def navigation_xml(self):
+        """
+        :rtype: NavigationXml
+        """
         return NavigationXml(self)
 
     @cached_property
     def toc_ncx(self):
+        """
+        :rtype: TocNcx
+        """
         return TocNcx(self)
 
+    @cached_property
+    def meta(self):
+        """
+        :rtype: EpubMeta
+        """
+        return EpubMeta(self)
+
+    def get_toc_table(self):
+        """
+        目次情報を取得
+        """
+        if self.toc_ncx.cleaned_toc_ncx_data:
+            # toc.ncx がパースできたらそれを使う
+            return self.toc_ncx.cleaned_toc_ncx_data
+        elif self.navigation_xml.cleaned_navigation_xml_data:
+            # toc.ncx がパースできなければ、navigation-xml から取得を試す
+            return self.navigation_xml.cleaned_navigation_xml_data
+        return None
+
     def dump_meta(self):
+        pass
         # self.toc_xml_path
         # self.navigation_xml.debug_cleaned_navigation_xml_data()
 
-        self.toc_ncx.debug_cleaned_toc_ncx_data()
+        # self.toc_ncx.debug_cleaned_toc_ncx_data()
 
-        # print(self.cleaned_navigation_xml_data)
-        # bs = self.navigation_xml_bs4
-        #
-        # print(self.navigation_xml_etree)
-        # print(self.toc_ncx_etree)
+
+class EpubMeta(object):
+    def __init__(self, epub_extractor):
+        self.ee = epub_extractor
+        self.meta_element = self.ee.metadata_element
+
+    def _get_text_dc(self, tag_name):
+        tag = self.meta_element.find(
+            './/{}{}'.format(
+                "{http://purl.org/dc/elements/1.1/}", tag_name
+            ))
+        if tag is not None:
+            return tag.text
+        else:
+            return None
+
+    def _get_texts_dc(self, tag_name):
+        return [e.text for e in self.meta_element.findall(
+            './/{}{}'.format(
+                "{http://purl.org/dc/elements/1.1/}", tag_name
+            ))]
+
+    @cached_property
+    def title(self):
+        return self._get_text_dc('title')
+
+    @cached_property
+    def publisher(self):
+        return self._get_text_dc('publisher')
+
+    @cached_property
+    def identifier(self):
+        return self._get_text_dc('identifier')
+
+    @cached_property
+    def language(self):
+        return self._get_text_dc('language')
+
+    @cached_property
+    def creators(self):
+        return self._get_texts_dc('creator')
+
+    def as_ordered_dict(self):
+        return OrderedDict([
+            ('title', self.title),
+            ('publisher', self.publisher),
+            ('identifier', self.identifier),
+            ('language', self.language),
+            ('creators', self.creators),
+            ('meta', self.meta_dict),
+        ])
+
+    def meta_tags(self):
+        return self.meta_element.findall(
+            './/{http://www.idpf.org/2007/opf}meta')
+
+    @cached_property
+    def meta_dict(self):
+        od = OrderedDict()
+        for mt in self.meta_tags():
+            if mt.attrib.get('refines'):
+                # refines 今回は無視
+                continue
+            if mt.attrib.get('name') and mt.attrib.get('content'):
+                od[mt.attrib.get('name')] = mt.attrib.get('content')
+                continue
+            if mt.attrib.get('property'):
+                od[mt.attrib.get('property')] = mt.text
+                continue
+        return od
 
 
 class NavigationXml(object):
@@ -407,12 +498,12 @@ class NavigationXml(object):
 
     @cached_property
     def navigation_xml_path(self):
-        manifest = self.ee.content_xml_etree.find(
-            './/{http://www.idpf.org/2007/opf}manifest')
-        items = manifest.findall('.//{http://www.idpf.org/2007/opf}item')
+        ntq = namespace_tag_query(self.ee.content_xml_etree._root)
+        manifest = self.ee.content_xml_etree.find(ntq('manifest'))
+        items = manifest.findall(ntq('item'))
         for item in items:
-            if item.attrib.get('id') == 'toc' or \
-                            item.attrib.get('properties') == 'nav':
+            if item.attrib.get('id') == 'toc' \
+                    or item.attrib.get('properties') == 'nav':
                 return os.path.join(
                     self.ee.content_base_dir,
                     item.attrib.get('href'))
@@ -485,16 +576,11 @@ class TocNcx(object):
             './/{http://www.idpf.org/2007/opf}manifest')
         items = manifest.findall('.//{http://www.idpf.org/2007/opf}item')
         for item in items:
-            if item.attrib.get('media-type') == 'application/x-dtbncx+xml' or \
-                            item.attrib.get('id') == 'ncx':
+            if item.attrib.get('media-type') == 'application/x-dtbncx+xml' \
+                    or item.attrib.get('id') == 'ncx':
                 return os.path.join(
                     self.ee.content_base_dir,
                     item.attrib.get('href'))
-
-    @cached_property
-    def toc_ncx_etree(self):
-        etree = parse_xml_with_recover(self.toc_ncx_path)
-        return etree
 
     @cached_property
     def toc_ncx_data(self):
@@ -520,7 +606,7 @@ class TocNcx(object):
         return list(_gen())
 
     @cached_property
-    def cleaned_navigation_xml_data(self):
+    def cleaned_toc_ncx_data(self):
         attended = set()
         navs = []
         for o in sorted(self.toc_ncx_data,
@@ -536,7 +622,7 @@ class TocNcx(object):
         return navs
 
     def debug_cleaned_toc_ncx_data(self):
-        for o in self.cleaned_navigation_xml_data:
+        for o in self.cleaned_toc_ncx_data:
             print('{:03d}-{:03d} {}'.format(
                 o['start_page'], o['end_page'], o['section_title']
             ))

@@ -9,6 +9,8 @@ EPUB ファイルの Meta を表示
 """
 
 import argparse
+import six
+import json
 
 try:
     from .epub_extractor import EpubExtractor
@@ -20,7 +22,15 @@ except ImportError:
 
 def procedure(file_path):
     epub_extractor = EpubExtractor(file_path)
-    epub_extractor.dump_meta()
+    meta = epub_extractor.meta
+    d = meta.as_ordered_dict()
+    if six.PY2:
+        print(json.dumps(d, ensure_ascii=False, indent=2).encode(
+            'utf-8', errors='ignore'))
+
+    else:
+        print(json.dumps(d, ensure_ascii=False, indent=2))
+
     epub_extractor.close()
 
 
@@ -35,6 +45,7 @@ def main():
     for epub_file in args.epub_files:
         procedure(epub_file)
 
+
 def test():
     project_dir = os.path.dirname(os.path.dirname(__file__))
     epub_file = os.path.join(
@@ -43,5 +54,5 @@ def test():
 
 
 if __name__ == '__main__':
-    # main()
-    test()
+    main()
+    # test()

@@ -12,5 +12,5 @@ done
 EPUBS="test-epubs/*.epub"
 for EPUB in ${EPUBS}; do
     echo ${EPUB}
-    epub_extractor/epub_dump_toc.py ${EPUB}
+    epub_extractor/epub_dump_meta.py ${EPUB}
 done

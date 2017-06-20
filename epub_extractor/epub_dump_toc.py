@@ -2,10 +2,12 @@
 # -*- coding: utf-8 -*-
 from __future__ import print_function, unicode_literals
 
+import json
 import os
+import six
 
 """
-EPUB ファイルの Meta を表示
+EPUB ファイルの TOC を表示
 """
 
 import argparse
@@ -20,20 +22,31 @@ except ImportError:
 
 def procedure(file_path):
     epub_extractor = EpubExtractor(file_path)
-    epub_extractor.dump_meta()
-    epub_extractor.close()
+    return epub_extractor.get_toc_table()
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Dump EPUB Meta information.')
+    parser = argparse.ArgumentParser(description='Dump EPUB toc data.')
     parser.add_argument(
         'epub_files', metavar='EPUB-Files', type=str, nargs='+',
         help='Target Epub Files')
 
     args = parser.parse_args()
 
-    for epub_file in args.epub_files:
-        procedure(epub_file)
+    if len(args.epub_files) > 1:
+        out = []
+        for epub_file in args.epub_files:
+            out.append(procedure(epub_file))
+    else:
+        out = procedure(args.epub_files[0])
+
+    if six.PY2:
+        print(json.dumps(out, ensure_ascii=False, indent=2).encode(
+            'utf-8', errors='ignore'))
+
+    else:
+        print(json.dumps(out, ensure_ascii=False, indent=2))
+
 
 def test():
     project_dir = os.path.dirname(os.path.dirname(__file__))
@@ -43,5 +56,5 @@ def test():
 
 
 if __name__ == '__main__':
-    # main()
-    test()
+    main()
+    # test()
