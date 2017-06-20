@@ -22,7 +22,9 @@ except ImportError:
 
 def procedure(file_path):
     epub_extractor = EpubExtractor(file_path)
-    return epub_extractor.get_toc_table()
+    toc_table = epub_extractor.get_toc_table()
+    epub_extractor.close()
+    return toc_table
 
 
 def main():
@@ -54,6 +56,7 @@ def test():
         project_dir, 'test-epubs', 'BT000011939000100101900203_001.epub')
     toc_table = procedure(epub_file)
     print(toc_table)
+
 
 if __name__ == '__main__':
     main()
