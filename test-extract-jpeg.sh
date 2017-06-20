@@ -12,5 +12,5 @@ done
 EPUBS="test-epubs/*.epub"
 for EPUB in ${EPUBS}; do
     echo ${EPUB}
-    epub_extract_jpeg/epub_extract_jpeg.py ${EPUB}
+    epub_extractor/epub_extract_jpeg.py ${EPUB}
 done
