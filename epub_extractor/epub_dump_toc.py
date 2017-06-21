@@ -2,9 +2,7 @@
 # -*- coding: utf-8 -*-
 from __future__ import print_function, unicode_literals
 
-import json
 import os
-import six
 
 """
 EPUB ファイルの TOC を表示
@@ -42,20 +40,17 @@ def main():
     else:
         out = procedure(args.epub_files[0])
 
-    if six.PY2:
-        print(json.dumps(out, ensure_ascii=False, indent=2).encode(
-            'utf-8', errors='ignore'))
-
-    else:
-        print(json.dumps(out, ensure_ascii=False, indent=2))
+    EpubExtractor.print_json(out)
 
 
 def test():
     project_dir = os.path.dirname(os.path.dirname(__file__))
+    # epub_file = os.path.join(
+    #     project_dir, 'test-epubs', 'BT000027007500100101900206_001.epub')
     epub_file = os.path.join(
-        project_dir, 'test-epubs', 'BT000011939000100101900203_001.epub')
-    toc_table = procedure(epub_file)
-    print(toc_table)
+        project_dir, 'test-epubs', 'BT000012354200100101900206_001.epub')
+    data = procedure(epub_file)
+    EpubExtractor.print_json(data)
 
 
 if __name__ == '__main__':

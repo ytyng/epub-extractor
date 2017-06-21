@@ -422,13 +422,29 @@ class EpubExtractor(object):
         """
         目次情報を取得
         """
-        if self.toc_ncx.cleaned_toc_ncx_data:
-            # toc.ncx がパースできたらそれを使う
-            return self.toc_ncx.cleaned_toc_ncx_data
-        elif self.navigation_xml.cleaned_navigation_xml_data:
-            # toc.ncx がパースできなければ、navigation-xml から取得を試す
-            return self.navigation_xml.cleaned_navigation_xml_data
+        try:
+            if self.toc_ncx.cleaned_toc_ncx_data:
+                # toc.ncx がパースできたらそれを使う
+                return self.toc_ncx.cleaned_toc_ncx_data
+        except TocNcx.TocNcxNotFound:
+            pass
+        try:
+            if self.navigation_xml.cleaned_navigation_xml_data:
+                # toc.ncx がパースできなければ、navigation-xml から取得を試す
+                return self.navigation_xml.cleaned_navigation_xml_data
+        except NavigationXml.NavigationXmlNotFound:
+            pass
         return None
+
+    @staticmethod
+    def print_json(object):
+        import six
+        import json
+        if six.PY2:
+            print(json.dumps(object, ensure_ascii=False, indent=2).encode(
+                'utf-8', errors='ignore'))
+        else:
+            print(json.dumps(object, ensure_ascii=False, indent=2))
 
     def dump_meta(self):
         pass
@@ -514,6 +530,9 @@ class NavigationXml(object):
     NAVIGATION XML (Required BeautifulSoup4)
     """
 
+    class NavigationXmlNotFound(EpubExtractorError):
+        pass
+
     def __init__(self, epub_extractor):
         self.ee = epub_extractor
 
@@ -528,6 +547,7 @@ class NavigationXml(object):
                 return os.path.join(
                     self.ee.content_base_dir,
                     item.attrib.get('href'))
+        raise self.NavigationXmlNotFound()
 
     @cached_property
     def navigation_xml_etree(self):
@@ -581,6 +601,9 @@ class TocNcx(object):
     TOC NCX
     """
 
+    class TocNcxNotFound(EpubExtractorError):
+        pass
+
     def __init__(self, epub_extractor):
         self.ee = epub_extractor
 
@@ -599,12 +622,14 @@ class TocNcx(object):
                 return os.path.join(
                     self.ee.content_base_dir,
                     item.attrib.get('href'))
+        raise self.TocNcxNotFound()
 
     @cached_property
     def toc_ncx_data(self):
         """
         toc.ncx を解析した辞書
         """
+
         def _gen():
             ntq = namespace_tag_query(self.toc_ncx_etree._root)
             for np in self.toc_ncx_etree.findall(ntq('navPoint')):

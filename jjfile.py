@@ -6,7 +6,7 @@ menu = [
     ('cancel',
      ""),
     ('test',
-     "./test-extract.sh"),
+     ["./test-dump-meta.sh; ./test-dump-toc.sh; ./test-extract-jpeg.sh"]),
     ('flake8',
      "flake8 ."),
     ('register pypi',
