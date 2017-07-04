@@ -337,14 +337,19 @@ class EpubExtractor(object):
         shutil.move(source_image_path, destination_image_path)
         print('{} -> {}'.format(source_image_path, destination_image_name))
 
-    def extract_images(self, output_dir=None, convert_png=True):
+    def extract_images(
+            self, output_dir=None, convert_png=True,
+            delete_exists_dir=False):
         """
         画像ファイルをディレクトリに展開(移動)
         """
         if not output_dir:
             output_dir, _ext = os.path.splitext(self.epub_file_path)
         if os.path.exists(output_dir):
-            raise self.OutputDirectoryAlreadyExists(output_dir)
+            if delete_exists_dir:
+                shutil.rmtree(output_dir)
+            else:
+                raise self.OutputDirectoryAlreadyExists(output_dir)
 
         os.mkdir(output_dir)
 

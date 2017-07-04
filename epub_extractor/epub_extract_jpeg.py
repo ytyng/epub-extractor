@@ -16,9 +16,11 @@ except ImportError:
     from epub_extractor.epub_extractor import EpubExtractor
 
 
-def procedure(file_path, convert_png=True):
+def procedure(file_path, convert_png=True, delete_exists_dir=False):
     epub_extractor = EpubExtractor(file_path)
-    epub_extractor.extract_images(convert_png=convert_png)
+    epub_extractor.extract_images(
+        convert_png=convert_png,
+        delete_exists_dir=delete_exists_dir)
     epub_extractor.close()
 
 
