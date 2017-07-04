@@ -10,7 +10,11 @@ menu = [
     ('flake8',
      "flake8 ."),
     ('register pypi',
-     "./setup.py register"),
+     "twine register dist/epub-extractor-0.1.4.tar.gz"),
     ('upload pypi',
+     "twine upload dist/epub-extractor-0.1.4.tar.gz"),
+    ('__register pypi',
+     "./setup.py register"),
+    ('__upload pypi',
      "./setup.py sdist upload"),
 ]

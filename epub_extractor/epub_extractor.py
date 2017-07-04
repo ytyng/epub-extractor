@@ -318,7 +318,7 @@ class EpubExtractor(object):
         return list(self._get_image_pages())
 
     def _move_jpeg_file(self, image_page, output_dir,
-                        page_index, convert_png=True):
+                        page_index, convert_png=True, copy=True):
         source_image_path = image_page.image_path
 
         if image_page.is_png:
@@ -334,12 +334,15 @@ class EpubExtractor(object):
             destination_image_name = '{:03d}.jpg'.format(page_index)
         destination_image_path = os.path.join(
             output_dir, destination_image_name)
-        shutil.move(source_image_path, destination_image_path)
+        if copy:
+            shutil.copy(source_image_path, destination_image_path)
+        else:
+            shutil.move(source_image_path, destination_image_path)
         print('{} -> {}'.format(source_image_path, destination_image_name))
 
     def extract_images(
             self, output_dir=None, convert_png=True,
-            delete_exists_dir=False):
+            delete_exists_dir=False, copy=True):
         """
         画像ファイルをディレクトリに展開(移動)
         """
@@ -354,8 +357,10 @@ class EpubExtractor(object):
         os.mkdir(output_dir)
 
         for i, image_page in enumerate(self.image_pages, start=1):
-            self._move_jpeg_file(image_page, output_dir, i,
-                                 convert_png=convert_png)
+            self._move_jpeg_file(
+                image_page, output_dir, i,
+                convert_png=convert_png,
+                copy=copy)
 
     @cached_property
     def metadata_element(self):
