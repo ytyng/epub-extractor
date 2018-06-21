@@ -9,6 +9,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import warnings
 from collections import OrderedDict
 from xml.etree import ElementTree
 
@@ -357,10 +358,14 @@ class EpubExtractor(object):
         os.mkdir(output_dir)
 
         for i, image_page in enumerate(self.image_pages, start=1):
-            self._move_jpeg_file(
-                image_page, output_dir, i,
-                convert_png=convert_png,
-                copy=copy)
+            try:
+                self._move_jpeg_file(
+                    image_page, output_dir, i,
+                    convert_png=convert_png,
+                    copy=copy)
+            except ImagePage.InvalidImageLength as e:
+                warnings.warn('{} {}'.format(
+                    e.__class__.__name__, e))
 
     @cached_property
     def metadata_element(self):
@@ -384,7 +389,7 @@ class EpubExtractor(object):
         return {
             image_page.item_href: i
             for i, image_page in enumerate(self.image_pages, start=1)
-            }
+        }
 
     @cached_property
     def xml_path_page_number_dict_basename(self):
@@ -395,7 +400,7 @@ class EpubExtractor(object):
         return {
             os.path.basename(k): v for k, v
             in self.xml_path_page_number_dict.items()
-            }
+        }
 
     def get_page_number_from_page_xml_path(self, page_xml_path, default=1):
         """

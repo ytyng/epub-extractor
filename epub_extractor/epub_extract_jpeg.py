@@ -10,10 +10,11 @@ import argparse
 
 try:
     from .epub_extractor import EpubExtractor
-except (ValueError, SystemError):
-    from epub_extractor import EpubExtractor
-except ImportError:
-    from epub_extractor.epub_extractor import EpubExtractor
+except (ValueError, SystemError, ImportError):
+    try:
+        from epub_extractor import EpubExtractor
+    except (ValueError, SystemError, ImportError):
+        from epub_extractor.epub_extractor import EpubExtractor
 
 
 def procedure(file_path, convert_png=True, delete_exists_dir=False):
