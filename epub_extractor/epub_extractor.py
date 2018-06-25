@@ -157,6 +157,9 @@ class ImagePage(object):
                 './/{http://www.w3.org/1999/xhtml}img')
             # 画像パスの属性は src
 
+        if len(images) >= 2:
+            return self.get_largest_image_element(images)
+
         if len(images) != 1:
             raise self.InvalidImageLength('{}, {}'.format(
                 self.item_element, len(images)))
@@ -169,23 +172,38 @@ class ImagePage(object):
         画像のフルパス
         :return:
         """
-        attr_names = [
-            '{http://www.w3.org/1999/xlink}href',
-            'src',
-            '{http://www.w3.org/1999/xlink}src',
-        ]
+        return self.get_image_path_of_image_element(self.image_element)
 
-        for attr_name in attr_names:
-            val = self.image_element.attrib.get(attr_name)
-            if val:
-                return os.path.join(os.path.dirname(self.page_xhtml_path), val)
-
-        raise self.ImagePathAttrNotFound(self.image_element.attrib)
+    def get_largest_image_element(self, image_elements):
+        """
+        複数の image_element から一番サイズの大きな画像を取得
+        """
+        L = [(i, self.get_image_size_of_image_element(i))
+             for i in image_elements]
+        return list(sorted(L, key=lambda x: x[1], reverse=True))[0][0]
 
     # その他プロパティが必要であれば
     # self.image_element.attrib.get('width', None)
     # self.image_element.attrib.get('height', None)
     # self.image_element.attrib.get('width', None)
+    def get_image_path_of_image_element(self, image_element):
+        attr_names = [
+            '{http://www.w3.org/1999/xlink}href',
+            'src',
+            '{http://www.w3.org/1999/xlink}src',
+        ]
+        for attr_name in attr_names:
+            val = image_element.attrib.get(attr_name)
+            if val:
+                return os.path.join(os.path.dirname(self.page_xhtml_path), val)
+        raise self.ImagePathAttrNotFound(image_element.attrib)
+
+    def get_image_size_of_image_element(self, image_element):
+        """
+        画像のサイズを取得
+        """
+        return os.path.getsize(
+            self.get_image_path_of_image_element(image_element))
 
     @cached_property
     def is_png(self):
