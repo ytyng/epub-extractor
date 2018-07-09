@@ -336,6 +336,9 @@ class EpubExtractor(object):
     def image_pages(self):
         return list(self._get_image_pages())
 
+    def format_page_number(self, page_number):
+        return '{:05d}'.format(page_number)
+
     def _move_jpeg_file(self, image_page, output_dir,
                         page_index, convert_png=True, copy=True):
         source_image_path = image_page.image_path
@@ -343,14 +346,17 @@ class EpubExtractor(object):
         if image_page.is_png:
             if convert_png:
                 # PNGを変換する場合
-                destination_image_name = '{:03d}.jpg'.format(page_index)
+                destination_image_name = '{}.jpg'.format(
+                    self.format_page_number(page_index))
                 destination_image_path = os.path.join(
                     output_dir, destination_image_name)
                 convert_to_jpeg(source_image_path, destination_image_path)
                 return
-            destination_image_name = '{:03d}.png'.format(page_index)
+            destination_image_name = '{}.png'.format(
+                self.format_page_number(page_index))
         else:
-            destination_image_name = '{:03d}.jpg'.format(page_index)
+            destination_image_name = '{}.jpg'.format(
+                self.format_page_number(page_index))
         destination_image_path = os.path.join(
             output_dir, destination_image_name)
         if copy:
@@ -624,8 +630,10 @@ class NavigationXml(object):
 
     def debug_cleaned_navigation_xml_data(self):
         for o in self.cleaned_navigation_xml_data:
-            print('{:03d}-{:03d} {}'.format(
-                o['start_page'], o['end_page'], o['section_title']
+            print('{}-{} {}'.format(
+                self.ee.format_page_number(o['start_page']),
+                self.ee.format_page_number(o['end_page']),
+                o['section_title']
             ))
 
 
@@ -697,6 +705,8 @@ class TocNcx(object):
 
     def debug_cleaned_toc_ncx_data(self):
         for o in self.cleaned_toc_ncx_data:
-            print('{:03d}-{:03d} {}'.format(
-                o['start_page'], o['end_page'], o['section_title']
+            print('{}-{} {}'.format(
+                self.ee.format_page_number(o['start_page']),
+                self.ee.format_page_number(o['end_page']),
+                o['section_title']
             ))
