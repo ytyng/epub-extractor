@@ -34,11 +34,16 @@ def main():
         '--no-png-convert', dest='no_png_convert', action='store_true',
         default=False,
         help='No png convert to jpeg')
+    parser.add_argument(
+        '--delete-exists-dir', dest='delete_exists_dir', action='store_true',
+        default=False,
+        help='No png convert to jpeg')
 
     args = parser.parse_args()
 
     for epub_file in args.epub_files:
-        procedure(epub_file, convert_png=not args.no_png_convert)
+        procedure(epub_file, convert_png=not args.no_png_convert,
+                  delete_exists_dir=args.delete_exists_dir)
 
 
 if __name__ == '__main__':

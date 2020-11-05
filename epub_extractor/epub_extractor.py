@@ -10,11 +10,14 @@ import subprocess
 import sys
 import tempfile
 import warnings
+from abc import ABCMeta, abstractmethod
 from collections import OrderedDict
+from typing import Iterator, List, Callable, Optional, Dict
 from xml.etree import ElementTree
+from xml.etree.ElementTree import Element
 
 try:
-    from pip.utils import cached_property
+    from pip._vendor.distlib.util import cached_property
 except ImportError:
     try:
         from django.utils.functional import cached_property
@@ -22,7 +25,7 @@ except ImportError:
         raise
 
 
-def parse_xml_with_recover(xml_path):
+def parse_xml_with_recover(xml_path: str) -> ElementTree:
     """
     xmlをパース
     & の使い方が悪いファイルがある場合、
@@ -46,7 +49,11 @@ def parse_xml_with_recover(xml_path):
     return ElementTree.fromstring(xml_source)
 
 
-def convert_to_jpeg(source_file_path, destination_file_path, jpeg_quality=70):
+def convert_to_jpeg(
+        source_file_path: str,
+        destination_file_path: str,
+        jpeg_quality=70
+) -> None:
     """
     PNG を Jpeg に変換して移動
     """
@@ -70,7 +77,7 @@ re_entity = re.compile(r'(>[^<]*)(&)([^<]*<)')
 re_replace = re.compile(r'&(?!\w*?;)')
 
 
-def xml_repair(xml_source):
+def xml_repair(xml_source: str) -> str:
     """
     XMLのソースコードの & を &amp; に変換する
     :param self:
@@ -84,12 +91,12 @@ def xml_repair(xml_source):
     return re_entity.sub(_replace, xml_source)
 
 
-def get_etree_namespace(element):
+def get_etree_namespace(element: Element) -> str:
     m = re.match('\{.*\}', element.tag)
     return m.group(0) if m else ''
 
 
-def namespace_tag_query(element):
+def namespace_tag_query(element:Element) -> Callable[[str], str]:
     """
     element のネームスペースをバインドし、ネームスペースつきのタグ名を返す関数を返す
     """
@@ -101,13 +108,52 @@ def namespace_tag_query(element):
     return _generate_query
 
 
-class ImagePage(object):
-    """
-    画像ページ のクラス
-    """
-
+class ImageElementBase(metaclass=ABCMeta):
     class ItemHrefNotFound(Exception):
         pass
+
+    @cached_property
+    @abstractmethod
+    def image_path(self) -> str:
+        raise NotImplementedError
+
+    @cached_property
+    @abstractmethod
+    def is_png(self) -> bool:
+        """Is image type PNG"""
+        raise NotImplementedError
+
+
+class ImageElement(ImageElementBase):
+    """
+    item_element が、image/xxx の場合 (ページごとの XMLが無い場合)
+    """
+    def __init__(self, item_element: Element, itemref_element: Element,
+                 epub_extractor: 'EpubExtractor'):
+        self.item_element = item_element
+        self.itemref_element = itemref_element
+        self.epub_extractor = epub_extractor
+
+    @cached_property
+    def image_path(self) -> str:
+        item_href = self.item_element.attrib.get('href', None)
+        if not item_href:
+            raise self.ItemHrefNotFound(f'{self.item_element}')
+        return os.path.join(
+            self.epub_extractor.content_base_dir, item_href)
+
+    @cached_property
+    def is_png(self) -> bool:
+        return self.item_element.attrib.get('href', '').endswith('.png') or \
+               self.item_element.attrib.get('media-type', '').endswith('/png')
+
+
+class ImagePage(ImageElementBase):
+    """
+    画像ページ のクラス
+
+    item_element が、xhtml で、その中に画像が含まれる場合の処理
+    """
 
     class InvalidImageLength(Exception):
         pass
@@ -115,13 +161,14 @@ class ImagePage(object):
     class ImagePathAttrNotFound(Exception):
         pass
 
-    def __init__(self, item_element, itemref_element, epub_extract_jpeg):
+    def __init__(self, item_element: Element, itemref_element: Element,
+                 epub_extractor: 'EpubExtractor'):
         self.item_element = item_element
         self.itemref_element = itemref_element
-        self.epub_extract_jpeg = epub_extract_jpeg
+        self.epub_extractor = epub_extractor
 
     @cached_property
-    def page_xhtml_path(self):
+    def page_xhtml_path(self) -> str:
         """
         ページのXMLのパス
         例: item/xhtml/001.xhtml
@@ -132,17 +179,17 @@ class ImagePage(object):
             raise self.ItemHrefNotFound(self.item_element)
 
         return os.path.join(
-            self.epub_extract_jpeg.content_base_dir, item_href)
+            self.epub_extractor.content_base_dir, item_href)
 
     # page_xml_path = os.path.join(self.content_base_dir, item_href)
 
     @cached_property
-    def page_xhtml_etree(self):
+    def page_xhtml_etree(self) -> ElementTree:
         # ページを解析
         return parse_xml_with_recover(self.page_xhtml_path)
 
     @cached_property
-    def image_element(self):
+    def image_element(self) -> Element:
 
         if self.item_element.attrib.get('properties') == 'svg':
             # SVGラッピング 日本のコミックEPUBでよくある形式
@@ -167,14 +214,14 @@ class ImagePage(object):
         return images[0]
 
     @cached_property
-    def image_path(self):
+    def image_path(self) -> str:
         """
         画像のフルパス
         :return:
         """
         return self.get_image_path_of_image_element(self.image_element)
 
-    def get_largest_image_element(self, image_elements):
+    def get_largest_image_element(self, image_elements: List[Element]):
         """
         複数の image_element から一番サイズの大きな画像を取得
         """
@@ -186,7 +233,7 @@ class ImagePage(object):
     # self.image_element.attrib.get('width', None)
     # self.image_element.attrib.get('height', None)
     # self.image_element.attrib.get('width', None)
-    def get_image_path_of_image_element(self, image_element):
+    def get_image_path_of_image_element(self, image_element: Element) -> str:
         attr_names = [
             '{http://www.w3.org/1999/xlink}href',
             'src',
@@ -198,7 +245,7 @@ class ImagePage(object):
                 return os.path.join(os.path.dirname(self.page_xhtml_path), val)
         raise self.ImagePathAttrNotFound(image_element.attrib)
 
-    def get_image_size_of_image_element(self, image_element):
+    def get_image_size_of_image_element(self, image_element: Element) -> int:
         """
         画像のサイズを取得
         """
@@ -206,11 +253,11 @@ class ImagePage(object):
             self.get_image_path_of_image_element(image_element))
 
     @cached_property
-    def is_png(self):
+    def is_png(self) -> bool:
         return self.image_path.endswith('.png')
 
     @cached_property
-    def item_href(self):
+    def item_href(self) -> Optional[str]:
         return self.item_element.attrib.get('href', None)
 
 
@@ -218,7 +265,7 @@ class EpubExtractorError(Exception):
     pass
 
 
-class EpubExtractor(object):
+class EpubExtractor:
     class EpubNotFound(EpubExtractorError):
         pass
 
@@ -237,7 +284,7 @@ class EpubExtractor(object):
     class OutputDirectoryAlreadyExists(EpubExtractorError):
         pass
 
-    def __init__(self, epub_file_path):
+    def __init__(self, epub_file_path: str):
         if not os.path.exists(epub_file_path):
             raise self.EpubNotFound(epub_file_path)
 
@@ -247,18 +294,18 @@ class EpubExtractor(object):
         self.epub_file_path = epub_file_path
         self.setup()
 
-    def setup(self):
+    def setup(self) -> None:
         self.temp_dir = tempfile.mkdtemp(suffix='epub-dump-meta')
         # unzip
         subprocess.Popen(
             ('unzip', self.epub_file_path, "-d", self.temp_dir),
             stdout=subprocess.PIPE, stderr=subprocess.PIPE).communicate()
 
-    def close(self):
+    def close(self) -> None:
         shutil.rmtree(self.temp_dir)
 
     @cached_property
-    def content_xml_path(self):
+    def content_xml_path(self) -> str:
         """
         content.xml (standard.opf) のファイルパスを返す
         """
@@ -278,34 +325,34 @@ class EpubExtractor(object):
         return content_xml_path
 
     @cached_property
-    def content_xml_text(self):
+    def content_xml_text(self) -> str:
         return open(self.content_xml_path).read()
 
     @cached_property
-    def content_xml_etree(self):
+    def content_xml_etree(self) -> ElementTree:
         return parse_xml_with_recover(self.content_xml_path)
 
     @cached_property
-    def content_base_dir(self):
+    def content_base_dir(self) -> str:
         # ファイルのパス基準となるディレクトリ
         return os.path.dirname(self.content_xml_path)
 
     @cached_property
-    def items_dict(self):
+    def items_dict(self) -> Dict[str, Element]:
         """
         id をキーにした item の辞書
         """
         ntq = namespace_tag_query(self.content_xml_etree._root)
         manifest = self.content_xml_etree.find(ntq('manifest'))
         items = manifest.findall(ntq('item'))
-        items_dict = {}
+        items_dict = {}  # type: Dict[str, Element]
         for item in items:
             id = item.attrib.get('id')
             items_dict[id] = item
         return items_dict
 
     @cached_property
-    def itemrefs(self):
+    def itemrefs(self) -> Iterator[Element]:
         """
         spine > itemref をページ順に返すジェネレータ
         """
@@ -315,10 +362,10 @@ class EpubExtractor(object):
         for itemref in itemrefs:
             yield itemref
 
-    def _get_image_pages(self):
+    def _get_image_pages(self) -> Iterator[ImageElementBase]:
         items_dict = self.items_dict
 
-        for itemref in self.itemrefs:
+        for itemref in self.itemrefs:  # type: Element
 
             idref = itemref.attrib.get('idref', None)
             if not idref:
@@ -327,20 +374,26 @@ class EpubExtractor(object):
             if idref not in items_dict:
                 raise self.ItemNotFound(idref)
 
-            item = items_dict[idref]
+            item = items_dict[idref]  # type: Element
 
-            page_image = ImagePage(item, itemref, self)
-            yield page_image
+            # item.attrib['media-type'] == 'image/jpeg' の場合
+            media_type = item.attrib.get('media-type', '')
+            if media_type.startswith('image/'):
+                image_page = ImageElement(item, itemref, self)
+            else:
+                image_page = ImagePage(item, itemref, self)
+            yield image_page
 
     @cached_property
-    def image_pages(self):
+    def image_pages(self) -> List[ImageElementBase]:
         return list(self._get_image_pages())
 
-    def format_page_number(self, page_number):
+    def format_page_number(self, page_number: str) -> str:
         return '{:05d}'.format(page_number)
 
-    def _move_jpeg_file(self, image_page, output_dir,
-                        page_index, convert_png=True, copy=True):
+    def _move_jpeg_file(self, image_page: ImageElementBase, output_dir: str,
+                        page_index: int, convert_png: bool = True,
+                        copy: bool = True):
         source_image_path = image_page.image_path
 
         if image_page.is_png:
@@ -366,8 +419,8 @@ class EpubExtractor(object):
         print('{} -> {}'.format(source_image_path, destination_image_name))
 
     def extract_images(
-            self, output_dir=None, convert_png=True,
-            delete_exists_dir=False, copy=True):
+            self, output_dir: Optional[str] = None, convert_png: bool = True,
+            delete_exists_dir: bool = False, copy: bool = True):
         """
         画像ファイルをディレクトリに展開(移動)
         """
@@ -401,11 +454,11 @@ class EpubExtractor(object):
         return metadata
 
     @cached_property
-    def last_page_number(self):
+    def last_page_number(self) -> int:
         return len(self.image_pages)
 
     @cached_property
-    def xml_path_page_number_dict(self):
+    def xml_path_page_number_dict(self) -> Dict[str, Element]:
         """
         XMLファイルとページ番号の対応表
         :return: dict
@@ -493,7 +546,7 @@ class EpubExtractor(object):
         # self.toc_ncx.debug_cleaned_toc_ncx_data()
 
 
-class EpubMeta(object):
+class EpubMeta:
     def __init__(self, epub_extractor):
         self.ee = epub_extractor
         self.meta_element = self.ee.metadata_element
@@ -564,7 +617,7 @@ class EpubMeta(object):
         return od
 
 
-class NavigationXml(object):
+class NavigationXml:
     """
     NAVIGATION XML (Required BeautifulSoup4)
     """
@@ -637,7 +690,7 @@ class NavigationXml(object):
             ))
 
 
-class TocNcx(object):
+class TocNcx:
     """
     TOC NCX
     """
@@ -649,11 +702,11 @@ class TocNcx(object):
         self.ee = epub_extractor
 
     @cached_property
-    def toc_ncx_etree(self):
+    def toc_ncx_etree(self) -> ElementTree:
         return parse_xml_with_recover(self.toc_ncx_path)
 
     @cached_property
-    def toc_ncx_path(self):
+    def toc_ncx_path(self) -> str:
         manifest = self.ee.content_xml_etree.find(
             './/{http://www.idpf.org/2007/opf}manifest')
         items = manifest.findall('.//{http://www.idpf.org/2007/opf}item')
@@ -666,7 +719,7 @@ class TocNcx(object):
         raise self.TocNcxNotFound()
 
     @cached_property
-    def toc_ncx_data(self):
+    def toc_ncx_data(self) -> List[OrderedDict]:
         """
         toc.ncx を解析した辞書
         """
@@ -703,7 +756,7 @@ class TocNcx(object):
             navs[-1]['end_page'] = self.ee.last_page_number
         return navs
 
-    def debug_cleaned_toc_ncx_data(self):
+    def debug_cleaned_toc_ncx_data(self) -> None:
         for o in self.cleaned_toc_ncx_data:
             print('{}-{} {}'.format(
                 self.ee.format_page_number(o['start_page']),
