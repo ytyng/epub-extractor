@@ -1,7 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-from __future__ import print_function, unicode_literals
-
 """
 EPUB ファイルを jpeg に展開する
 """

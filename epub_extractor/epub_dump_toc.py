@@ -1,6 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-from __future__ import print_function, unicode_literals
 
 import os
 
@@ -12,10 +10,11 @@ import argparse
 
 try:
     from .epub_extractor import EpubExtractor
-except (ValueError, SystemError):
-    from epub_extractor import EpubExtractor
-except ImportError:
-    from epub_extractor.epub_extractor import EpubExtractor
+except (ValueError, SystemError, ImportError):
+    try:
+        from epub_extractor import EpubExtractor
+    except (ValueError, SystemError, ImportError):
+        from epub_extractor.epub_extractor import EpubExtractor
 
 
 def procedure(file_path):

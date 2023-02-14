@@ -1,7 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-
-from __future__ import print_function, unicode_literals
 
 import os
 import re
@@ -12,17 +9,10 @@ import tempfile
 import warnings
 from abc import ABCMeta, abstractmethod
 from collections import OrderedDict
+from functools import cached_property
 from typing import Iterator, List, Callable, Optional, Dict
 from xml.etree import ElementTree
 from xml.etree.ElementTree import Element
-
-try:
-    from pip._vendor.distlib.util import cached_property
-except ImportError:
-    try:
-        from django.utils.functional import cached_property
-    except ImportError:
-        raise
 
 
 def parse_xml_with_recover(xml_path: str) -> ElementTree:
@@ -281,6 +271,9 @@ class EpubExtractor:
     class ItemNotFound(Exception):
         pass
 
+    class ItemHrefNotFound(Exception):
+        pass
+
     class OutputDirectoryAlreadyExists(EpubExtractorError):
         pass
 
@@ -457,6 +450,22 @@ class EpubExtractor:
     def last_page_number(self) -> int:
         return len(self.image_pages)
 
+    def _get_item_href_from_image_page(self, image_page):
+        """
+        ページのリンク先を取得
+        e.g.: 'xhtml/cover.xhtml'
+        """
+        path = getattr(image_page, 'item_href', None)
+        if path:
+            return path
+        if hasattr(image_page, 'item_element') and \
+                hasattr(image_page.item_element, 'attrib'):
+            path = image_page.item_element.attrib.get('href', None)
+            if path:
+                return path
+        # 未知のパターン。デバッグして調査してください。
+        raise self.ItemHrefNotFound(image_page)
+
     @cached_property
     def xml_path_page_number_dict(self) -> Dict[str, Element]:
         """
@@ -464,7 +473,7 @@ class EpubExtractor:
         :return: dict
         """
         return {
-            image_page.item_href: i
+            self._get_item_href_from_image_page(image_page): i
             for i, image_page in enumerate(self.image_pages, start=1)
         }
 
@@ -482,6 +491,7 @@ class EpubExtractor:
     def get_page_number_from_page_xml_path(self, page_xml_path, default=1):
         """
         ページXMLパスから画像番号を取得
+        page_xml_path は XHTMLファイルのパスか、画像のパスになる(EPUB形式による)
         """
         if page_xml_path in self.xml_path_page_number_dict:
             return self.xml_path_page_number_dict[page_xml_path]
@@ -530,13 +540,8 @@ class EpubExtractor:
 
     @staticmethod
     def print_json(object):
-        import six
         import json
-        if six.PY2:
-            print(json.dumps(object, ensure_ascii=False, indent=2).encode(
-                'utf-8', errors='ignore'))
-        else:
-            print(json.dumps(object, ensure_ascii=False, indent=2))
+        print(json.dumps(object, ensure_ascii=False, indent=2))
 
     def dump_meta(self):
         pass
