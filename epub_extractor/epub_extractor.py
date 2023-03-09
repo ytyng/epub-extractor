@@ -294,8 +294,14 @@ class EpubExtractor:
             ('unzip', self.epub_file_path, "-d", self.temp_dir),
             stdout=subprocess.PIPE, stderr=subprocess.PIPE).communicate()
 
-    def close(self) -> None:
-        shutil.rmtree(self.temp_dir)
+    def close(self, *, fail_silently=True) -> None:
+        try:
+            shutil.rmtree(self.temp_dir)
+        except PermissionError as e:
+            if not fail_silently:
+                raise
+            print('{}: {} ({})'.format(
+                e.__class__.__name__, e, self.temp_dir))
 
     @cached_property
     def content_xml_path(self) -> str:
@@ -413,7 +419,8 @@ class EpubExtractor:
 
     def extract_images(
             self, output_dir: Optional[str] = None, convert_png: bool = True,
-            delete_exists_dir: bool = False, copy: bool = True):
+            delete_exists_dir: bool = False, copy: bool = True,
+            fail_silently: bool = True):
         """
         画像ファイルをディレクトリに展開(移動)
         """
@@ -421,7 +428,13 @@ class EpubExtractor:
             output_dir, _ext = os.path.splitext(self.epub_file_path)
         if os.path.exists(output_dir):
             if delete_exists_dir:
-                shutil.rmtree(output_dir)
+                try:
+                    shutil.rmtree(output_dir)
+                except PermissionError as e:
+                    if not fail_silently:
+                        raise
+                    print('{}: {} ({})'.format(
+                        e.__class__.__name__, e, output_dir))
             else:
                 raise self.OutputDirectoryAlreadyExists(output_dir)
 
