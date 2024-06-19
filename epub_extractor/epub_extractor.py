@@ -185,8 +185,14 @@ class ImagePage(ImageElementBase):
             # SVGラッピング 日本のコミックEPUBでよくある形式
             svg = self.page_xhtml_etree.find(
                 './/{http://www.w3.org/2000/svg}svg')
-            images = svg.findall('.//{http://www.w3.org/2000/svg}image')
-            # 画像パスの属性は {http://www.w3.org/1999/xlink}href
+            if not svg:
+                # 極稀に、svg タグが存在していない場合がある。
+                # 代わりに img タグを探す
+                images = self.page_xhtml_etree.findall(
+                    './/{http://www.w3.org/1999/xhtml}img')
+            else:
+                images = svg.findall('.//{http://www.w3.org/2000/svg}image')
+                # 画像パスの属性は {http://www.w3.org/1999/xlink}href
 
         else:
             # ここ未テスト
@@ -249,6 +255,37 @@ class ImagePage(ImageElementBase):
     @cached_property
     def item_href(self) -> Optional[str]:
         return self.item_element.attrib.get('href', None)
+
+
+class ImageSVGElement(ImagePage):
+    """
+    item_element が、image/svg+xml の場合
+    """
+
+    @cached_property
+    def image_element(self) -> str:
+        item_href = self.item_element.attrib.get('href', None)
+        if not item_href:
+            raise self.ItemHrefNotFound(f'{self.item_element}')
+        if not item_href.lower().endswith('.svg'):
+            # SVG ではない画像。普通の画像として扱う。
+            return os.path.join(
+                self.epub_extractor.content_base_dir, item_href)
+        # SVG だった。
+        svg_path = os.path.join(
+            self.epub_extractor.content_base_dir, item_href)
+        etree = parse_xml_with_recover(svg_path)
+        # SVG から image を抽出
+        images = etree.findall('.//{http://www.w3.org/2000/svg}image')
+
+        if len(images) >= 2:
+            return self.get_largest_image_element(images)
+
+        if len(images) != 1:
+            raise self.InvalidImageLength('{}, {}'.format(
+                self.item_element, len(images)))
+
+        return images[0]
 
 
 class EpubExtractorError(Exception):
@@ -375,11 +412,15 @@ class EpubExtractor:
 
             item = items_dict[idref]  # type: Element
 
-            # item.attrib['media-type'] == 'image/jpeg' の場合
             media_type = item.attrib.get('media-type', '')
-            if media_type.startswith('image/'):
+            if media_type.startswith('image/svg'):
+                # image/svg+xml 等
+                image_page = ImageSVGElement(item, itemref, self)
+            elif media_type.startswith('image/'):
+                # image/jpeg, image/png
                 image_page = ImageElement(item, itemref, self)
             else:
+                # application/xhtml+xml 等
                 image_page = ImagePage(item, itemref, self)
             yield image_page
 
