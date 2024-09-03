@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
 
-import os
-
 """
 EPUB ファイルの TOC を表示
 """
@@ -27,8 +25,12 @@ def procedure(file_path):
 def main():
     parser = argparse.ArgumentParser(description='Dump EPUB toc data.')
     parser.add_argument(
-        'epub_files', metavar='EPUB-Files', type=str, nargs='+',
-        help='Target Epub Files')
+        'epub_files',
+        metavar='EPUB-Files',
+        type=str,
+        nargs='+',
+        help='Target Epub Files',
+    )
 
     args = parser.parse_args()
 
@@ -42,16 +44,5 @@ def main():
     EpubExtractor.print_json(out)
 
 
-def test():
-    project_dir = os.path.dirname(os.path.dirname(__file__))
-    # epub_file = os.path.join(
-    #     project_dir, 'test-epubs', 'BT000027007500100101900206_001.epub')
-    epub_file = os.path.join(
-        project_dir, 'test-epubs', 'BT000012354200100101900206_001.epub')
-    data = procedure(epub_file)
-    EpubExtractor.print_json(data)
-
-
 if __name__ == '__main__':
     main()
-    # test()
