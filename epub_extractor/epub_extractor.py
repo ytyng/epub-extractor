@@ -40,10 +40,14 @@ def parse_xml_with_recover(xml_path: str) -> ElementTree:
 
 
 def convert_to_jpeg(
-    source_file_path: str, destination_file_path: str, *, jpeg_quality=70
+    source_file_path: str,
+    destination_file_path: str,
+    *,
+    jpeg_quality: int = 70,
+    copy: bool = True,
 ) -> None:
     """
-    PNG を Jpeg に変換して移動
+    PNG を Jpeg に変換する
     """
     try:
         from PIL import Image
@@ -60,7 +64,8 @@ def convert_to_jpeg(
     im = Image.open(source_file_path)
     im = im.convert("RGB")
     im.save(destination_file_path, 'jpeg', quality=jpeg_quality)
-    os.remove(source_file_path)
+    if not copy:
+        os.remove(source_file_path)
     print('{} -> {}'.format(source_file_path, destination_file_path))
 
 
@@ -458,6 +463,10 @@ class EpubExtractor:
         output_dir: str,
         page_index: int,
         convert_png: bool = True,
+        # copy: 指定すると、ファイルの移動ではなくコピーをする。
+        # 1つの画像ファイルが複数箇所で使われれている場合、移動するとエラーになるので
+        # コピーをしたほうが安全に処理ができる。
+        # ただし、ストレージ容量が余分に必要で、遅い。
         copy: bool = True,
     ):
         source_image_path = image_page.image_path
@@ -471,7 +480,9 @@ class EpubExtractor:
                 destination_image_path = os.path.join(
                     output_dir, destination_image_name
                 )
-                convert_to_jpeg(source_image_path, destination_image_path)
+                convert_to_jpeg(
+                    source_image_path, destination_image_path, copy=copy
+                )
                 return
             destination_image_name = '{}.png'.format(
                 self.format_page_number(page_index)
