@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# coding: utf-8
 from setuptools import setup
 from epub_extractor import __author__, __version__, __license__
 

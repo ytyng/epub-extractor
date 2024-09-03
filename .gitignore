@@ -60,3 +60,4 @@ Podfile.lock
 venv
 .venv
 
+.env

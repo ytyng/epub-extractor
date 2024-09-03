@@ -1,7 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-
-from __future__ import print_function, unicode_literals
 
 import os
 import re
@@ -12,17 +9,10 @@ import tempfile
 import warnings
 from abc import ABCMeta, abstractmethod
 from collections import OrderedDict
-from typing import Iterator, List, Callable, Optional, Dict
+from functools import cached_property
+from typing import Callable, Dict, Iterator, List, Optional
 from xml.etree import ElementTree
 from xml.etree.ElementTree import Element
-
-try:
-    from pip._vendor.distlib.util import cached_property
-except ImportError:
-    try:
-        from django.utils.functional import cached_property
-    except ImportError:
-        raise
 
 
 def parse_xml_with_recover(xml_path: str) -> ElementTree:
@@ -50,26 +40,32 @@ def parse_xml_with_recover(xml_path: str) -> ElementTree:
 
 
 def convert_to_jpeg(
-        source_file_path: str,
-        destination_file_path: str,
-        jpeg_quality=70
+    source_file_path: str,
+    destination_file_path: str,
+    *,
+    jpeg_quality: int = 70,
+    copy: bool = True,
 ) -> None:
     """
-    PNG を Jpeg に変換して移動
+    PNG を Jpeg に変換する
     """
     try:
         from PIL import Image
     except ImportError:
-        print('PNG image found. Converting png to jpeg, require PIL.',
-              file=sys.stderr)
-        print('Try: "pip install PIL" or "pip install pillow"',
-              file=sys.stderr)
+        print(
+            'PNG image found. Converting png to jpeg, require PIL.',
+            file=sys.stderr,
+        )
+        print(
+            'Try: "pip install PIL" or "pip install pillow"', file=sys.stderr
+        )
         raise
 
     im = Image.open(source_file_path)
     im = im.convert("RGB")
     im.save(destination_file_path, 'jpeg', quality=jpeg_quality)
-    os.remove(source_file_path)
+    if not copy:
+        os.remove(source_file_path)
     print('{} -> {}'.format(source_file_path, destination_file_path))
 
 
@@ -96,7 +92,7 @@ def get_etree_namespace(element: Element) -> str:
     return m.group(0) if m else ''
 
 
-def namespace_tag_query(element:Element) -> Callable[[str], str]:
+def namespace_tag_query(element: Element) -> Callable[[str], str]:
     """
     element のネームスペースをバインドし、ネームスペースつきのタグ名を返す関数を返す
     """
@@ -128,8 +124,13 @@ class ImageElement(ImageElementBase):
     """
     item_element が、image/xxx の場合 (ページごとの XMLが無い場合)
     """
-    def __init__(self, item_element: Element, itemref_element: Element,
-                 epub_extractor: 'EpubExtractor'):
+
+    def __init__(
+        self,
+        item_element: Element,
+        itemref_element: Element,
+        epub_extractor: 'EpubExtractor',
+    ):
         self.item_element = item_element
         self.itemref_element = itemref_element
         self.epub_extractor = epub_extractor
@@ -139,13 +140,13 @@ class ImageElement(ImageElementBase):
         item_href = self.item_element.attrib.get('href', None)
         if not item_href:
             raise self.ItemHrefNotFound(f'{self.item_element}')
-        return os.path.join(
-            self.epub_extractor.content_base_dir, item_href)
+        return os.path.join(self.epub_extractor.content_base_dir, item_href)
 
     @cached_property
     def is_png(self) -> bool:
-        return self.item_element.attrib.get('href', '').endswith('.png') or \
-               self.item_element.attrib.get('media-type', '').endswith('/png')
+        return self.item_element.attrib.get('href', '').endswith(
+            '.png'
+        ) or self.item_element.attrib.get('media-type', '').endswith('/png')
 
 
 class ImagePage(ImageElementBase):
@@ -161,8 +162,12 @@ class ImagePage(ImageElementBase):
     class ImagePathAttrNotFound(Exception):
         pass
 
-    def __init__(self, item_element: Element, itemref_element: Element,
-                 epub_extractor: 'EpubExtractor'):
+    def __init__(
+        self,
+        item_element: Element,
+        itemref_element: Element,
+        epub_extractor: 'EpubExtractor',
+    ):
         self.item_element = item_element
         self.itemref_element = itemref_element
         self.epub_extractor = epub_extractor
@@ -178,8 +183,7 @@ class ImagePage(ImageElementBase):
         if not item_href:
             raise self.ItemHrefNotFound(self.item_element)
 
-        return os.path.join(
-            self.epub_extractor.content_base_dir, item_href)
+        return os.path.join(self.epub_extractor.content_base_dir, item_href)
 
     # page_xml_path = os.path.join(self.content_base_dir, item_href)
 
@@ -194,22 +198,32 @@ class ImagePage(ImageElementBase):
         if self.item_element.attrib.get('properties') == 'svg':
             # SVGラッピング 日本のコミックEPUBでよくある形式
             svg = self.page_xhtml_etree.find(
-                './/{http://www.w3.org/2000/svg}svg')
-            images = svg.findall('.//{http://www.w3.org/2000/svg}image')
-            # 画像パスの属性は {http://www.w3.org/1999/xlink}href
+                './/{http://www.w3.org/2000/svg}svg'
+            )
+            if not svg:
+                # 極稀に、svg タグが存在していない場合がある。
+                # 代わりに img タグを探す
+                images = self.page_xhtml_etree.findall(
+                    './/{http://www.w3.org/1999/xhtml}img'
+                )
+            else:
+                images = svg.findall('.//{http://www.w3.org/2000/svg}image')
+                # 画像パスの属性は {http://www.w3.org/1999/xlink}href
 
         else:
             # ここ未テスト
             images = self.page_xhtml_etree.findall(
-                './/{http://www.w3.org/1999/xhtml}img')
+                './/{http://www.w3.org/1999/xhtml}img'
+            )
             # 画像パスの属性は src
 
         if len(images) >= 2:
             return self.get_largest_image_element(images)
 
         if len(images) != 1:
-            raise self.InvalidImageLength('{}, {}'.format(
-                self.item_element, len(images)))
+            raise self.InvalidImageLength(
+                '{}, {}'.format(self.item_element, len(images))
+            )
 
         return images[0]
 
@@ -225,8 +239,10 @@ class ImagePage(ImageElementBase):
         """
         複数の image_element から一番サイズの大きな画像を取得
         """
-        L = [(i, self.get_image_size_of_image_element(i))
-             for i in image_elements]
+        L = [
+            (i, self.get_image_size_of_image_element(i))
+            for i in image_elements
+        ]
         return list(sorted(L, key=lambda x: x[1], reverse=True))[0][0]
 
     # その他プロパティが必要であれば
@@ -250,7 +266,8 @@ class ImagePage(ImageElementBase):
         画像のサイズを取得
         """
         return os.path.getsize(
-            self.get_image_path_of_image_element(image_element))
+            self.get_image_path_of_image_element(image_element)
+        )
 
     @cached_property
     def is_png(self) -> bool:
@@ -261,6 +278,40 @@ class ImagePage(ImageElementBase):
         return self.item_element.attrib.get('href', None)
 
 
+class ImageSVGElement(ImagePage):
+    """
+    item_element が、image/svg+xml の場合
+    """
+
+    @cached_property
+    def image_element(self) -> str:
+        item_href = self.item_element.attrib.get('href', None)
+        if not item_href:
+            raise self.ItemHrefNotFound(f'{self.item_element}')
+        if not item_href.lower().endswith('.svg'):
+            # SVG ではない画像。普通の画像として扱う。
+            return os.path.join(
+                self.epub_extractor.content_base_dir, item_href
+            )
+        # SVG だった。
+        svg_path = os.path.join(
+            self.epub_extractor.content_base_dir, item_href
+        )
+        etree = parse_xml_with_recover(svg_path)
+        # SVG から image を抽出
+        images = etree.findall('.//{http://www.w3.org/2000/svg}image')
+
+        if len(images) >= 2:
+            return self.get_largest_image_element(images)
+
+        if len(images) != 1:
+            raise self.InvalidImageLength(
+                '{}, {}'.format(self.item_element, len(images))
+            )
+
+        return images[0]
+
+
 class EpubExtractorError(Exception):
     pass
 
@@ -269,7 +320,7 @@ class EpubExtractor:
     class EpubNotFound(EpubExtractorError):
         pass
 
-    class NoEpubExtention(EpubExtractorError):
+    class NoEpubExtension(EpubExtractorError):
         pass
 
     class ContentXmlNotFound(EpubExtractorError):
@@ -281,6 +332,9 @@ class EpubExtractor:
     class ItemNotFound(Exception):
         pass
 
+    class ItemHrefNotFound(Exception):
+        pass
+
     class OutputDirectoryAlreadyExists(EpubExtractorError):
         pass
 
@@ -289,7 +343,7 @@ class EpubExtractor:
             raise self.EpubNotFound(epub_file_path)
 
         if not epub_file_path.endswith('.epub'):
-            raise self.NoEpubExtention(epub_file_path)
+            raise self.NoEpubExtension(epub_file_path)
 
         self.epub_file_path = epub_file_path
         self.setup()
@@ -299,10 +353,17 @@ class EpubExtractor:
         # unzip
         subprocess.Popen(
             ('unzip', self.epub_file_path, "-d", self.temp_dir),
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE).communicate()
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        ).communicate()
 
-    def close(self) -> None:
-        shutil.rmtree(self.temp_dir)
+    def close(self, *, fail_silently=True) -> None:
+        try:
+            shutil.rmtree(self.temp_dir)
+        except PermissionError as e:
+            if not fail_silently:
+                raise
+            print('{}: {} ({})'.format(e.__class__.__name__, e, self.temp_dir))
 
     @cached_property
     def content_xml_path(self) -> str:
@@ -311,15 +372,16 @@ class EpubExtractor:
         """
         # META-INF/container.xml で固定
         container_xml_path = os.path.join(
-            self.temp_dir, 'META-INF', 'container.xml')
+            self.temp_dir, 'META-INF', 'container.xml'
+        )
         etree = parse_xml_with_recover(container_xml_path)
         # rootfile タグを探す
         rootfile_node = etree.find(
-            ".//{urn:oasis:names:tc:opendocument:xmlns:container}rootfile")
+            ".//{urn:oasis:names:tc:opendocument:xmlns:container}rootfile"
+        )
         content_opf_path = rootfile_node.attrib['full-path']
 
-        content_xml_path = os.path.join(
-            self.temp_dir, content_opf_path)
+        content_xml_path = os.path.join(self.temp_dir, content_opf_path)
         if not os.path.exists(content_xml_path):
             raise self.ContentXmlNotFound(content_xml_path)
         return content_xml_path
@@ -376,11 +438,15 @@ class EpubExtractor:
 
             item = items_dict[idref]  # type: Element
 
-            # item.attrib['media-type'] == 'image/jpeg' の場合
             media_type = item.attrib.get('media-type', '')
-            if media_type.startswith('image/'):
+            if media_type.startswith('image/svg'):
+                # image/svg+xml 等
+                image_page = ImageSVGElement(item, itemref, self)
+            elif media_type.startswith('image/'):
+                # image/jpeg, image/png
                 image_page = ImageElement(item, itemref, self)
             else:
+                # application/xhtml+xml 等
                 image_page = ImagePage(item, itemref, self)
             yield image_page
 
@@ -391,27 +457,43 @@ class EpubExtractor:
     def format_page_number(self, page_number: str) -> str:
         return '{:05d}'.format(page_number)
 
-    def _move_jpeg_file(self, image_page: ImageElementBase, output_dir: str,
-                        page_index: int, convert_png: bool = True,
-                        copy: bool = True):
+    def _move_jpeg_file(
+        self,
+        image_page: ImageElementBase,
+        output_dir: str,
+        page_index: int,
+        convert_png: bool = True,
+        # copy: 指定すると、ファイルの移動ではなくコピーをする。
+        # 1つの画像ファイルが複数箇所で使われれている場合、移動するとエラーになるので
+        # コピーをしたほうが安全に処理ができる。
+        # ただし、ストレージ容量が余分に必要で、遅い。
+        copy: bool = True,
+    ):
         source_image_path = image_page.image_path
 
         if image_page.is_png:
             if convert_png:
                 # PNGを変換する場合
                 destination_image_name = '{}.jpg'.format(
-                    self.format_page_number(page_index))
+                    self.format_page_number(page_index)
+                )
                 destination_image_path = os.path.join(
-                    output_dir, destination_image_name)
-                convert_to_jpeg(source_image_path, destination_image_path)
+                    output_dir, destination_image_name
+                )
+                convert_to_jpeg(
+                    source_image_path, destination_image_path, copy=copy
+                )
                 return
             destination_image_name = '{}.png'.format(
-                self.format_page_number(page_index))
+                self.format_page_number(page_index)
+            )
         else:
             destination_image_name = '{}.jpg'.format(
-                self.format_page_number(page_index))
+                self.format_page_number(page_index)
+            )
         destination_image_path = os.path.join(
-            output_dir, destination_image_name)
+            output_dir, destination_image_name
+        )
         if copy:
             shutil.copy(source_image_path, destination_image_path)
         else:
@@ -419,8 +501,13 @@ class EpubExtractor:
         print('{} -> {}'.format(source_image_path, destination_image_name))
 
     def extract_images(
-            self, output_dir: Optional[str] = None, convert_png: bool = True,
-            delete_exists_dir: bool = False, copy: bool = True):
+        self,
+        output_dir: Optional[str] = None,
+        convert_png: bool = True,
+        delete_exists_dir: bool = False,
+        copy: bool = True,
+        fail_silently: bool = True,
+    ):
         """
         画像ファイルをディレクトリに展開(移動)
         """
@@ -428,7 +515,16 @@ class EpubExtractor:
             output_dir, _ext = os.path.splitext(self.epub_file_path)
         if os.path.exists(output_dir):
             if delete_exists_dir:
-                shutil.rmtree(output_dir)
+                try:
+                    shutil.rmtree(output_dir)
+                except PermissionError as e:
+                    if not fail_silently:
+                        raise
+                    print(
+                        '{}: {} ({})'.format(
+                            e.__class__.__name__, e, output_dir
+                        )
+                    )
             else:
                 raise self.OutputDirectoryAlreadyExists(output_dir)
 
@@ -437,12 +533,16 @@ class EpubExtractor:
         for i, image_page in enumerate(self.image_pages, start=1):
             try:
                 self._move_jpeg_file(
-                    image_page, output_dir, i,
+                    image_page,
+                    output_dir,
+                    i,
                     convert_png=convert_png,
-                    copy=copy)
+                    copy=copy,
+                )
             except ImagePage.InvalidImageLength as e:
-                warnings.warn('{} {}'.format(
-                    e.__class__.__name__, e))
+                warnings.warn(
+                    '{} {}'.format(e.__class__.__name__, e), stacklevel=2
+                )
 
     @cached_property
     def metadata_element(self):
@@ -457,6 +557,23 @@ class EpubExtractor:
     def last_page_number(self) -> int:
         return len(self.image_pages)
 
+    def _get_item_href_from_image_page(self, image_page):
+        """
+        ページのリンク先を取得
+        e.g.: 'xhtml/cover.xhtml'
+        """
+        path = getattr(image_page, 'item_href', None)
+        if path:
+            return path
+        if hasattr(image_page, 'item_element') and hasattr(
+            image_page.item_element, 'attrib'
+        ):
+            path = image_page.item_element.attrib.get('href', None)
+            if path:
+                return path
+        # 未知のパターン。デバッグして調査してください。
+        raise self.ItemHrefNotFound(image_page)
+
     @cached_property
     def xml_path_page_number_dict(self) -> Dict[str, Element]:
         """
@@ -464,7 +581,7 @@ class EpubExtractor:
         :return: dict
         """
         return {
-            image_page.item_href: i
+            self._get_item_href_from_image_page(image_page): i
             for i, image_page in enumerate(self.image_pages, start=1)
         }
 
@@ -475,19 +592,21 @@ class EpubExtractor:
         :return: dict
         """
         return {
-            os.path.basename(k): v for k, v
-            in self.xml_path_page_number_dict.items()
+            os.path.basename(k): v
+            for k, v in self.xml_path_page_number_dict.items()
         }
 
     def get_page_number_from_page_xml_path(self, page_xml_path, default=1):
         """
         ページXMLパスから画像番号を取得
+        page_xml_path は XHTMLファイルのパスか、画像のパスになる(EPUB形式による)
         """
         if page_xml_path in self.xml_path_page_number_dict:
             return self.xml_path_page_number_dict[page_xml_path]
         else:
             return self.xml_path_page_number_dict_basename.get(
-                os.path.basename(page_xml_path), default)
+                os.path.basename(page_xml_path), default
+            )
 
     @cached_property
     def navigation_xml(self):
@@ -530,13 +649,9 @@ class EpubExtractor:
 
     @staticmethod
     def print_json(object):
-        import six
         import json
-        if six.PY2:
-            print(json.dumps(object, ensure_ascii=False, indent=2).encode(
-                'utf-8', errors='ignore'))
-        else:
-            print(json.dumps(object, ensure_ascii=False, indent=2))
+
+        print(json.dumps(object, ensure_ascii=False, indent=2))
 
     def dump_meta(self):
         pass
@@ -553,19 +668,22 @@ class EpubMeta:
 
     def _get_text_dc(self, tag_name):
         tag = self.meta_element.find(
-            './/{}{}'.format(
-                "{http://purl.org/dc/elements/1.1/}", tag_name
-            ))
+            './/{}{}'.format("{http://purl.org/dc/elements/1.1/}", tag_name)
+        )
         if tag is not None:
             return tag.text
         else:
             return None
 
     def _get_texts_dc(self, tag_name):
-        return [e.text for e in self.meta_element.findall(
-            './/{}{}'.format(
-                "{http://purl.org/dc/elements/1.1/}", tag_name
-            ))]
+        return [
+            e.text
+            for e in self.meta_element.findall(
+                './/{}{}'.format(
+                    "{http://purl.org/dc/elements/1.1/}", tag_name
+                )
+            )
+        ]
 
     @cached_property
     def title(self):
@@ -588,18 +706,21 @@ class EpubMeta:
         return self._get_texts_dc('creator')
 
     def as_ordered_dict(self):
-        return OrderedDict([
-            ('title', self.title),
-            ('publisher', self.publisher),
-            ('identifier', self.identifier),
-            ('language', self.language),
-            ('creators', self.creators),
-            ('meta', self.meta_dict),
-        ])
+        return OrderedDict(
+            [
+                ('title', self.title),
+                ('publisher', self.publisher),
+                ('identifier', self.identifier),
+                ('language', self.language),
+                ('creators', self.creators),
+                ('meta', self.meta_dict),
+            ]
+        )
 
     def meta_tags(self):
         return self.meta_element.findall(
-            './/{http://www.idpf.org/2007/opf}meta')
+            './/{http://www.idpf.org/2007/opf}meta'
+        )
 
     @cached_property
     def meta_dict(self):
@@ -634,11 +755,13 @@ class NavigationXml:
         manifest = self.ee.content_xml_etree.find(ntq('manifest'))
         items = manifest.findall(ntq('item'))
         for item in items:
-            if item.attrib.get('id') == 'toc' \
-                    or item.attrib.get('properties') == 'nav':
+            if (
+                item.attrib.get('id') == 'toc'
+                or item.attrib.get('properties') == 'nav'
+            ):
                 return os.path.join(
-                    self.ee.content_base_dir,
-                    item.attrib.get('href'))
+                    self.ee.content_base_dir, item.attrib.get('href')
+                )
         raise self.NavigationXmlNotFound()
 
     @cached_property
@@ -648,6 +771,7 @@ class NavigationXml:
     @cached_property
     def navigation_xml_bs4(self):
         from bs4 import BeautifulSoup
+
         return BeautifulSoup(open(self.navigation_xml_path), "html.parser")
 
     @cached_property
@@ -657,11 +781,13 @@ class NavigationXml:
             for a in bs.find_all('a'):
                 href = a['href']
                 page_number = self.ee.get_page_number_from_page_xml_path(href)
-                yield OrderedDict([
-                    ('page_xml', href),
-                    ('start_page', page_number),
-                    ('section_title', a.text),
-                ])
+                yield OrderedDict(
+                    [
+                        ('page_xml', href),
+                        ('start_page', page_number),
+                        ('section_title', a.text),
+                    ]
+                )
 
         return list(_gen())
 
@@ -669,8 +795,9 @@ class NavigationXml:
     def cleaned_navigation_xml_data(self):
         attended = set()
         navs = []
-        for o in sorted(self.navigation_xml_data,
-                        key=lambda x: x['start_page']):
+        for o in sorted(
+            self.navigation_xml_data, key=lambda x: x['start_page']
+        ):
             if o['start_page'] in attended:
                 continue
             attended.add(o['start_page'])
@@ -683,11 +810,13 @@ class NavigationXml:
 
     def debug_cleaned_navigation_xml_data(self):
         for o in self.cleaned_navigation_xml_data:
-            print('{}-{} {}'.format(
-                self.ee.format_page_number(o['start_page']),
-                self.ee.format_page_number(o['end_page']),
-                o['section_title']
-            ))
+            print(
+                '{}-{} {}'.format(
+                    self.ee.format_page_number(o['start_page']),
+                    self.ee.format_page_number(o['end_page']),
+                    o['section_title'],
+                )
+            )
 
 
 class TocNcx:
@@ -708,14 +837,17 @@ class TocNcx:
     @cached_property
     def toc_ncx_path(self) -> str:
         manifest = self.ee.content_xml_etree.find(
-            './/{http://www.idpf.org/2007/opf}manifest')
+            './/{http://www.idpf.org/2007/opf}manifest'
+        )
         items = manifest.findall('.//{http://www.idpf.org/2007/opf}item')
         for item in items:
-            if item.attrib.get('media-type') == 'application/x-dtbncx+xml' \
-                    or item.attrib.get('id') == 'ncx':
+            if (
+                item.attrib.get('media-type') == 'application/x-dtbncx+xml'
+                or item.attrib.get('id') == 'ncx'
+            ):
                 return os.path.join(
-                    self.ee.content_base_dir,
-                    item.attrib.get('href'))
+                    self.ee.content_base_dir, item.attrib.get('href')
+                )
         raise self.TocNcxNotFound()
 
     @cached_property
@@ -732,11 +864,13 @@ class TocNcx:
                 src = content.attrib.get('src')
                 page_number = self.ee.get_page_number_from_page_xml_path(src)
                 # play_order = np.attrib.get('playOrder')
-                yield OrderedDict([
-                    ('page_xml', src),
-                    ('start_page', page_number),
-                    ('section_title', text.text),
-                ])
+                yield OrderedDict(
+                    [
+                        ('page_xml', src),
+                        ('start_page', page_number),
+                        ('section_title', text.text),
+                    ]
+                )
 
         return list(_gen())
 
@@ -744,8 +878,7 @@ class TocNcx:
     def cleaned_toc_ncx_data(self):
         attended = set()
         navs = []
-        for o in sorted(self.toc_ncx_data,
-                        key=lambda x: x['start_page']):
+        for o in sorted(self.toc_ncx_data, key=lambda x: x['start_page']):
             if o['start_page'] in attended:
                 continue
             attended.add(o['start_page'])
@@ -758,8 +891,10 @@ class TocNcx:
 
     def debug_cleaned_toc_ncx_data(self) -> None:
         for o in self.cleaned_toc_ncx_data:
-            print('{}-{} {}'.format(
-                self.ee.format_page_number(o['start_page']),
-                self.ee.format_page_number(o['end_page']),
-                o['section_title']
-            ))
+            print(
+                '{}-{} {}'.format(
+                    self.ee.format_page_number(o['start_page']),
+                    self.ee.format_page_number(o['end_page']),
+                    o['section_title'],
+                )
+            )

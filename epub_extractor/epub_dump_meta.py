@@ -1,7 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-from __future__ import print_function, unicode_literals
-
 import os
 
 """
@@ -12,10 +9,11 @@ import argparse
 
 try:
     from .epub_extractor import EpubExtractor
-except (ValueError, SystemError):
-    from epub_extractor import EpubExtractor
-except ImportError:
-    from epub_extractor.epub_extractor import EpubExtractor
+except (ValueError, SystemError, ImportError):
+    try:
+        from epub_extractor import EpubExtractor
+    except (ValueError, SystemError, ImportError):
+        from epub_extractor.epub_extractor import EpubExtractor
 
 
 def procedure(file_path):
@@ -29,8 +27,12 @@ def procedure(file_path):
 def main():
     parser = argparse.ArgumentParser(description='Dump EPUB Meta information.')
     parser.add_argument(
-        'epub_files', metavar='EPUB-Files', type=str, nargs='+',
-        help='Target Epub Files')
+        'epub_files',
+        metavar='EPUB-Files',
+        type=str,
+        nargs='+',
+        help='Target Epub Files',
+    )
 
     args = parser.parse_args()
 
@@ -44,14 +46,5 @@ def main():
     EpubExtractor.print_json(out)
 
 
-def test():
-    project_dir = os.path.dirname(os.path.dirname(__file__))
-    epub_file = os.path.join(
-        project_dir, 'test-epubs', 'BT000027007500100101900206_001.epub')
-    data = procedure(epub_file)
-    EpubExtractor.print_json(data)
-
-
 if __name__ == '__main__':
     main()
-    # test()
