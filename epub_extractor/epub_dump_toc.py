@@ -27,8 +27,12 @@ def procedure(file_path):
 def main():
     parser = argparse.ArgumentParser(description='Dump EPUB toc data.')
     parser.add_argument(
-        'epub_files', metavar='EPUB-Files', type=str, nargs='+',
-        help='Target Epub Files')
+        'epub_files',
+        metavar='EPUB-Files',
+        type=str,
+        nargs='+',
+        help='Target Epub Files',
+    )
 
     args = parser.parse_args()
 
@@ -47,7 +51,8 @@ def test():
     # epub_file = os.path.join(
     #     project_dir, 'test-epubs', 'BT000027007500100101900206_001.epub')
     epub_file = os.path.join(
-        project_dir, 'test-epubs', 'BT000012354200100101900206_001.epub')
+        project_dir, 'test-epubs', 'BT000012354200100101900206_001.epub'
+    )
     data = procedure(epub_file)
     EpubExtractor.print_json(data)
 
