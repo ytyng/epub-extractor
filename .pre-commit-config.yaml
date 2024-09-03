@@ -1,0 +1,56 @@
+repos:
+  - repo: https://github.com/psf/black
+    rev: 22.12.0
+    hooks:
+      - id: black
+        language: python
+        types: [python]
+        # GitHub actions の black と同じ設定にしている。 .github/workflows/black.yml
+        args: [
+            --line-length, "79",
+            --target-version, "py310",
+            --exclude, "migrations",
+            --skip-string-normalization,  # 文字列の正規化をスキップ
+            --experimental-string-processing,
+        ]
+
+  - repo: https://github.com/PyCQA/flake8
+    rev: 6.0.0
+    hooks:
+      - id: flake8
+        # github actions の flake8 と同じ設定にしている。 .github/workflows/flake8.yml
+        # B: Bugbearによって検出されるエラー
+        # B950: Bugbearによって検出される、最大行長に対する緩いチェック
+        # extend-ignore = E203, E501: これは、Flake8が無視するエラーコードを指定しています。
+        # E203とE501はそれぞれ次のようなエラーコードです。
+        # E203: コロンの前に空白があるときに発生するエラー。これは、BlackとPEP 8のコーディングスタイルが競合するため、無視されます。
+        args: [
+            --count,
+            --max-line-length, "88",
+            --select, "E9,F63,F7,F82,B,B950",
+            --extend-ignore, "E203",
+            --statistics,
+            --show-source,
+            --exclude,  "*/migrations/*",
+        ]
+        additional_dependencies: [ flake8-bugbear ]  # flake8-bugbear を追加
+
+  - repo: https://github.com/PyCQA/isort
+    rev: 5.12.0
+    hooks:
+      - id: isort
+        args: [--profile, "black"] # black とコンフリクトさせないよう同じ設定を使用
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.1.0
+    hooks:
+    # https://pre-commit.com/hooks.html にあるもの
+      - id: check-json  # json ファイルの構文チェック
+      - id: check-toml # toml ファイルの構文チェック
+      - id: check-yaml # yaml ファイルの構文チェック
+      - id: debug-statements # デバッグ用の print 文を検出
+      - id: end-of-file-fixer # ファイルの最後に改行を追加
+      - id: fix-byte-order-marker # BOM を削除
+      - id: trailing-whitespace # 行末の空白を削除
+      - id: detect-aws-credentials # AWS の認証情報を検出
+      - id: detect-private-key # 秘密鍵を検出
