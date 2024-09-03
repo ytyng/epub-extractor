@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
 
-import os
-
 """
 EPUB ファイルの TOC を表示
 """
@@ -46,17 +44,5 @@ def main():
     EpubExtractor.print_json(out)
 
 
-def test():
-    project_dir = os.path.dirname(os.path.dirname(__file__))
-    # epub_file = os.path.join(
-    #     project_dir, 'test-epubs', 'BT000027007500100101900206_001.epub')
-    epub_file = os.path.join(
-        project_dir, 'test-epubs', 'BT000012354200100101900206_001.epub'
-    )
-    data = procedure(epub_file)
-    EpubExtractor.print_json(data)
-
-
 if __name__ == '__main__':
     main()
-    # test()
